@@ -37,10 +37,13 @@ local KIND = {
 	[C_Spell.GetSpellName(430) or "Drink"] = "drink",
 }
 local WELL_FED = (C_Spell.GetSpellName(19705) or "Well Fed"):lower()
+local CONJURED = ITEM_CONJURED or "Conjured Item"
 
 local items = { food = {}, drink = {} }
 local chosen = {}
-local buffFood = {}
+-- what the warnings track: same as chosen, minus conjured stuff you can't buy
+local restock = {}
+local tooltipFlags = {}
 local updatePending = false
 
 local anchor = CreateFrame("Frame", "SnackCheckAnchor", UIParent)
@@ -71,19 +74,29 @@ local buttons = {}
 
 -- Bags ----------------------------------------------------------------------
 
--- buff food uses the Food spell too, don't waste it on a normal top-up
-local function isBuffFood(bag, slot, id)
-	if buffFood[id] == nil then
-		buffFood[id] = false
-		local data = C_TooltipInfo.GetBagItem(bag, slot)
-		for _, line in ipairs(data and data.lines or {}) do
-			if line.leftText and line.leftText:lower():find(WELL_FED, 1, true) then
-				buffFood[id] = true
-				break
+-- buff food uses the Food spell too, don't waste it on a normal top-up.
+-- conjured stuff is free, so it goes first
+local function readTooltip(bag, slot, id)
+	if tooltipFlags[id] then
+		return tooltipFlags[id]
+	end
+	local flags = { buff = false, conjured = false }
+	local data = C_TooltipInfo.GetBagItem(bag, slot)
+	for _, line in ipairs(data and data.lines or {}) do
+		local text = line.leftText
+		if text then
+			if text == CONJURED then
+				flags.conjured = true
+			elseif text:lower():find(WELL_FED, 1, true) then
+				flags.buff = true
 			end
 		end
 	end
-	return buffFood[id]
+	-- don't remember an empty tooltip, it might just not be loaded yet
+	if data and data.lines and #data.lines > 0 then
+		tooltipFlags[id] = flags
+	end
+	return flags
 end
 
 -- highest level first, then the smaller pile so leftovers get eaten first
@@ -112,13 +125,15 @@ local function scan()
 						incomplete = true
 					elseif kind then
 						seen[id] = true
+						local flags = readTooltip(bag, slot, id)
 						table.insert(items[kind], {
 							id = id,
 							name = info.itemName,
 							icon = info.iconFileID,
 							minLevel = minLevel,
 							count = C_Item.GetItemCount(id),
-							buff = isBuffFood(bag, slot, id),
+							buff = flags.buff,
+							conjured = flags.conjured,
 						})
 					end
 				end
@@ -130,17 +145,27 @@ local function scan()
 	return incomplete
 end
 
--- pinned item if we have it, otherwise the best non-buff one
-local function choose(kind, level)
-	local pinned = SnackCheckCharDB[kind]
-	local best
+-- order: pinned buff food, conjured, pinned, best non-buff.
+-- conjuredFilter "skip" or "only" narrows it down for the warnings
+local function choose(kind, level, conjuredFilter)
+	local pinnedID = SnackCheckCharDB[kind]
+	local pinned, conjured, best
 	for _, entry in ipairs(items[kind]) do
-		if entry.minLevel <= level then
-			if entry.id == pinned then return entry end
-			if not best and not entry.buff then best = entry end
+		local allowed = conjuredFilter == nil
+			or (conjuredFilter == "skip" and not entry.conjured)
+			or (conjuredFilter == "only" and entry.conjured)
+		if entry.minLevel <= level and allowed then
+			if entry.id == pinnedID then
+				pinned = entry
+			elseif entry.conjured and not entry.buff then
+				conjured = conjured or entry
+			elseif not entry.buff then
+				best = best or entry
+			end
 		end
 	end
-	return best
+	if pinned and pinned.buff then return pinned end
+	return conjured or pinned or best
 end
 
 -- Warnings ------------------------------------------------------------------
@@ -156,25 +181,52 @@ local function alert(msg, atLogin)
 	end
 end
 
+-- mages who know a conjure spell get warned about their conjured supply
+-- instead. every rank has its own ID, and learning a new one might drop the
+-- old one, so check them all
+local CONJURE_RANKS = {
+	food = { 587, 597, 990, 6129, 10144, 10145, 28612 },
+	drink = { 5504, 5505, 5506, 6127, 10138, 10139, 10140 },
+}
+local function conjures(kind)
+	local _, class = UnitClass("player")
+	if class ~= "MAGE" then return false end
+	for _, spellID in ipairs(CONJURE_RANKS[kind]) do
+		if IsPlayerSpell(spellID) then return true end
+	end
+	return false
+end
+
 -- only warns when crossing the threshold (and once at login). if the button
 -- switches item, e.g. the pinned one ran out, the new one is checked fresh
 local lastStock = {}
 local function checkStock(kind, report)
-	local entry = chosen[kind]
+	local entry = restock[kind]
 	local id = entry and entry.id
 	local count = entry and entry.count or 0
 	local last = lastStock[kind]
 	local before = last and last.id == id and last.count or nil
 	lastStock[kind] = { id = id, count = count }
 
+	local conjure = conjures(kind)
+	local label = conjure and "conjured " .. kind or kind
 	local threshold = SnackCheckDB.thresholds[kind]
 	if not entry then
 		if not last or last.id then
-			report.out[#report.out + 1] = kind
+			report.out[#report.out + 1] = label
+		else
+			return
 		end
 	elseif count < threshold and (not before or before >= threshold) then
-		report.lowKinds[#report.lowKinds + 1] = kind
+		report.lowKinds[#report.lowKinds + 1] = label
 		report.lowItems[#report.lowItems + 1] = count .. " " .. entry.name
+	else
+		return
+	end
+	if conjure then
+		report.conjure = true
+	else
+		report.buy = true
 	end
 end
 
@@ -197,7 +249,10 @@ local function checkAllStock(hasMana)
 			table.concat(report.lowKinds, " and "), table.concat(report.lowItems, ", "))
 	end
 	if #parts > 0 then
-		alert(table.concat(parts, " ") .. " Time to restock.", atLogin)
+		local action = report.conjure and report.buy and "Time to restock and conjure more."
+			or report.conjure and "Time to conjure more."
+			or "Time to restock."
+		alert(table.concat(parts, " ") .. " " .. action, atLogin)
 	end
 end
 
@@ -265,6 +320,8 @@ local function update(level)
 	local hasMana = UnitPowerMax("player", Enum.PowerType.Mana) > 0
 	chosen.food = choose("food", level)
 	chosen.drink = hasMana and choose("drink", level) or nil
+	restock.food = choose("food", level, conjures("food") and "only" or "skip")
+	restock.drink = hasMana and choose("drink", level, conjures("drink") and "only" or "skip") or nil
 	buttons.drink:SetShown(hasMana)
 
 	local both = {}

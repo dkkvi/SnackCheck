@@ -3,7 +3,7 @@
 ## Notes: Eat and drink buttons that pick the best food and water in your bags, and warn you when you're running low.
 ## IconTexture: Interface\Icons\INV_Misc_Fork&Knife
 ## Author: dkkvi
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: SnackCheckDB
 ## SavedVariablesPerCharacter: SnackCheckCharDB
 

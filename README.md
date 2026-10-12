@@ -5,6 +5,7 @@ A World of Warcraft: Forever addon that gives you two buttons, one to eat and on
 ## What it does
 
 - **Picks the best item for you.** The highest-level food and drink your character can use, with leftovers from smaller stacks used up first. Buff food (anything that gives Well Fed) is never used automatically.
+- **Eats the free stuff first.** Conjured food and water from a mage is used before anything you bought, even before a pinned item, so you don't burn through your own supply. Low-stock warnings ignore conjured items, since you can't buy more of them. Mages are the exception: once they know Conjure Food or Conjure Water, the warnings for that one track their conjured supply and tell them to conjure more.
 - **Lets you pin your own choice.** Hover a button and a list of everything in your bags pops up. Click an item to always use that one; click it again to go back to automatic. If a pinned item runs out, the button falls back to the best one you have and picks your pin up again once you restock. Pins are saved per character.
 - **Warns you before you run dry.** You get a message when the item a button is about to use drops below your threshold, and when you're out completely. One reminder at login if you're already low, then nothing until something actually changes.
 - **Works on your action bars if you prefer.** Snack Check can create `SC Eat`, `SC Drink` and `SC Eat+Drink` macros that always point at the right item, with the icon, count and tooltip you'd expect.
