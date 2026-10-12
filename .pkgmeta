@@ -1,0 +1,6 @@
+package-as: SnackCheck
+
+ignore:
+  - README.md
+  - .gitignore
+  - .pkgmeta
