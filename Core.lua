@@ -23,6 +23,7 @@ local PLACEHOLDER = {
 }
 -- the ? icon makes a macro follow #showtooltip
 local DYNAMIC_MACRO_ICON = 134400
+
 -- real values get set at login
 local buttonSize = 45
 local spacing = 6
@@ -372,17 +373,13 @@ local function togglePin(entry)
 end
 
 local function createFlyoutButton(index)
-	local button = CreateFrame("Button", nil, flyout)
-
-	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetAllPoints()
-	button.count = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-	button.count:SetPoint("BOTTOMRIGHT", -1, 1)
+	-- the action bar template gives us the same frame, icon and count as the bars
+	local button = CreateFrame("Button", nil, flyout, "ActionButtonTemplate")
+	button.count = button.Count
 	button.pinned = button:CreateTexture(nil, "OVERLAY")
 	button.pinned:SetTexture("Interface\\Buttons\\CheckButtonHilight")
 	button.pinned:SetBlendMode("ADD")
 	button.pinned:SetAllPoints()
-	button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
 	button:SetScript("OnClick", function(self)
 		togglePin(self.entry)
@@ -470,17 +467,12 @@ local function restorePosition()
 end
 
 local function createButton(kind, name, label)
-	local button = CreateFrame("Button", name, anchor, "SecureActionButtonTemplate")
+	local button = CreateFrame("Button", name, anchor, "SecureActionButtonTemplate, ActionButtonTemplate")
 	button.kind = kind
+	button.count = button.Count
 	button:SetAttribute("type", "macro")
 	button:RegisterForClicks("AnyUp", "AnyDown")
 	button:RegisterForDrag("LeftButton")
-
-	button.icon = button:CreateTexture(nil, "ARTWORK")
-	button.icon:SetAllPoints()
-	button.count = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-	button.count:SetPoint("BOTTOMRIGHT", -2, 2)
-	button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 
 	button:SetScript("OnDragStart", function()
 		if IsShiftKeyDown() and not InCombatLockdown() then
