@@ -74,4 +74,4 @@ Tick **Make macros** to create the three macros, then use the **Eat / Drink / Bo
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+GPL-3.0, see [LICENSE](LICENSE). Versions up to 0.2.1 were released under MIT.
