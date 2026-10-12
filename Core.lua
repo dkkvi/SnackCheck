@@ -467,9 +467,17 @@ local function restorePosition()
 end
 
 local function createButton(kind, name, label)
-	local button = CreateFrame("Button", name, anchor, "SecureActionButtonTemplate, ActionButtonTemplate")
+	local button = CreateFrame("Button", name, anchor, "SecureActionButtonTemplate")
 	button.kind = kind
-	button.count = button.Count
+	-- the action bar look sits on top as its own frame. putting that template
+	-- on the secure button itself replaces the secure click and nothing gets
+	-- eaten. mouse is off so clicks fall through to the button underneath
+	local look = CreateFrame("Button", nil, button, "ActionButtonTemplate")
+	look:SetAllPoints()
+	look:EnableMouse(false)
+	button.look = look
+	button.icon = look.icon
+	button.count = look.Count
 	button:SetAttribute("type", "macro")
 	button:RegisterForClicks("AnyUp", "AnyDown")
 	button:RegisterForDrag("LeftButton")
@@ -497,9 +505,13 @@ local function createButton(kind, name, label)
 		GameTooltip:AddLine("Pick a different one from the list", 0.6, 0.6, 0.6)
 		GameTooltip:AddLine("Shift-drag to move", 0.6, 0.6, 0.6)
 		GameTooltip:Show()
+		self.look:LockHighlight()
 		showFlyout(self)
 	end)
-	button:SetScript("OnLeave", GameTooltip_Hide)
+	button:SetScript("OnLeave", function(self)
+		GameTooltip_Hide()
+		self.look:UnlockHighlight()
+	end)
 
 	buttons[kind] = button
 	return button
