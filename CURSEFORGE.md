@@ -6,13 +6,15 @@ Made for WoW Forever since it's the version I play, feel free to fork my repo an
 
 ## What it does
 
-It picks the highest level food and drink your character can actually use. Leftovers from an older stack go first, so your bags don't fill up with stacks of 2. Buff food and drinks never get used unless you tell it to.
+It grabs food and drink your character can actually use, smallest stack first, so your bags don't fill up with stacks of 2. It only looks at stuff within 10 levels of the best thing you've got though, so you won't be chewing on Tough Jerky at level 40.
 
-Got mage food or water? That goes first between buffs. Free food is free food. If you're the mage yourself, the warnings keep an eye on your conjured stuff instead and tell you when it's time to conjure more.
+Not Well Fed? Then buff food goes first, including the cooking food that gives you extra xp. Inside dungeons it leaves buff food alone, mobs give less xp in there so it'd be a waste.
 
-Hover over a button and you get a list of everything in your bags. Click one to always use that, click it again to let the addon pick. Buff food and drinks only get used when their buff is missing. When your pinned food runs out it just uses the next best thing, and switches back once you've restocked. Pins are per character.
+Got mage food or water? That's next, before your own stuff. Free food is free food. If you're the mage yourself, the warnings keep an eye on your conjured stuff instead and tell you when it's time to conjure more.
 
-You get a warning when the food or drink you're about to use drops below a number you set, and one when you're out. If you log in already low you get a single reminder. After that it only speaks up when something actually changes.
+Hover over a button and you get a list of everything in your bags. Click one to always use that, click it again to let the addon pick. A pinned buff food gets skipped while you already have the buff. When your pinned food runs out it just uses the next best thing, and switches back once you've restocked. Pins are per character.
+
+You get a warning when your food or drink drops below a number you set, and one when you're out. Buff food doesn't count, that's a bonus. If you log in already low you get a single reminder. After that it only speaks up when something actually changes.
 
 If you'd rather have it on your action bars, it can make macros that always point at the right item. There are key bindings too, for eating, drinking, or both at once.
 
@@ -63,6 +65,13 @@ Should work on non-English clients too. If it does not, please let me know and I
 Settings and bindings are shared between your characters. Pins and macros aren't.
 
 ## Changelog
+
+### 0.4.0
+
+- Buff food, including the xp food from cooking, gets eaten when you're not Well Fed. Not in dungeons though. Thanks to brucestarlove for adding all the buff food and drinks in Forever.
+- Smallest stacks go first now, as long as they're close to the best food you've got.
+- Food that restores both health and mana works for both buttons.
+- Warnings only count your regular food and drink.
 
 ### 0.3.0
 

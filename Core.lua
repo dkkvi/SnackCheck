@@ -174,34 +174,72 @@ local function canUse(kind, entry, level)
 	return entry.minLevel <= level and (kind ~= "bandage" or C_Item.IsUsableItem(entry.id))
 end
 
+-- you only get one food buff at a time, so any of them counts: the exact one
+-- the item gives, anything called Well Fed, or any buff from the food list
 local function hasBuff(entry)
-	if entry.buffID then
-		return C_UnitAuras.GetPlayerAuraBySpellID(entry.buffID) ~= nil
+	if entry.buffID and C_UnitAuras.GetPlayerAuraBySpellID(entry.buffID) then
+		return true
 	end
-	return C_UnitAuras.GetAuraDataBySpellName("player", WELL_FED_NAME, "HELPFUL") ~= nil
+	if C_UnitAuras.GetAuraDataBySpellName("player", WELL_FED_NAME, "HELPFUL") then
+		return true
+	end
+	for i = 1, 40 do
+		local aura = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+		if not aura then break end
+		if addon.IsConsumableBuff(aura.spellId) then return true end
+	end
+	return false
 end
 
--- order: pinned buff if missing, conjured, pinned, best non-buff.
--- conjuredFilter "skip" or "only" narrows it down for the warnings
-local function choose(kind, level, conjuredFilter)
+-- dungeon mobs give less xp, so the xp buff food is wasted there
+local function inDungeon()
+	local _, instanceType = IsInInstance()
+	return instanceType == "party"
+end
+
+-- smallest stack first so leftovers get used, but only among things within
+-- this many levels of the best one, so you don't eat food that barely heals
+local NEAR_LEVELS = 10
+
+local function pick(candidates)
+	local top
+	for _, entry in ipairs(candidates) do
+		top = math.max(top or 0, entry.minLevel)
+	end
+	local best
+	for _, entry in ipairs(candidates) do
+		if entry.minLevel >= top - NEAR_LEVELS and (not best
+			or entry.count < best.count
+			or (entry.count == best.count and entry.minLevel > best.minLevel)) then
+			best = entry
+		end
+	end
+	return best
+end
+
+-- order: pinned, buff food while its buff is missing (not in dungeons),
+-- conjured, regular. pinned buff food is skipped while you have its buff
+local function choose(kind, level)
 	local pinnedID = SnackCheckCharDB[kind]
-	local pinned, conjured, best
+	local autoBuff = not inDungeon()
+	local buff, conjured, regular = {}, {}, {}
 	for _, entry in ipairs(items[kind]) do
-		local allowed = conjuredFilter == nil
-			or (conjuredFilter == "skip" and not entry.conjured)
-			or (conjuredFilter == "only" and entry.conjured)
-		if canUse(kind, entry, level) and allowed then
+		if canUse(kind, entry, level) then
+			local wanted = not entry.buff or not hasBuff(entry)
 			if entry.id == pinnedID then
-				if not entry.buff or not hasBuff(entry) then pinned = entry end
-			elseif entry.conjured and not entry.buff then
-				conjured = conjured or entry
-			elseif not entry.buff then
-				best = best or entry
+				if wanted then return entry end
+			elseif entry.buff then
+				if wanted and autoBuff then buff[#buff + 1] = entry end
+			elseif entry.conjured then
+				conjured[#conjured + 1] = entry
+			else
+				regular[#regular + 1] = entry
 			end
 		end
 	end
-	if pinned and pinned.buff then return pinned end
-	return conjured or pinned or best
+	-- bandages have no level to go on and the list is already best first
+	if kind == "bandage" then return regular[1] end
+	return pick(buff) or pick(conjured) or pick(regular)
 end
 
 -- Warnings ------------------------------------------------------------------
@@ -233,29 +271,50 @@ local function conjures(kind)
 	return false
 end
 
--- only warns when crossing the threshold (and once at login). if the button
--- switches item, e.g. the pinned one ran out, the new one is checked fresh
+-- what the warnings watch: your pinned item if you have one, otherwise all
+-- the regular stuff together. buff food is extra and never counts, conjured
+-- only counts for the mage who makes it
+local function stockFor(kind, level)
+	local onlyConjured = conjures(kind)
+	local pinnedID = SnackCheckCharDB[kind]
+	local total, parts = 0, {}
+	for _, entry in ipairs(items[kind]) do
+		if canUse(kind, entry, level) and not entry.buff
+			and (entry.conjured or false) == onlyConjured then
+			if entry.id == pinnedID then
+				return { key = entry.id, count = entry.count, text = entry.count .. " " .. entry.name }
+			end
+			total = total + entry.count
+			parts[#parts + 1] = entry.count .. " " .. entry.name
+		end
+	end
+	if total == 0 then return nil end
+	return { key = "all", count = total, text = table.concat(parts, ", ") }
+end
+
+-- only warns when crossing the threshold (and once at login). switching
+-- between a pinned item and everything else gets checked fresh
 local lastStock = {}
 local function checkStock(kind, report)
-	local entry = restock[kind]
-	local id = entry and entry.id
-	local count = entry and entry.count or 0
+	local stock = restock[kind]
+	local key = stock and stock.key
+	local count = stock and stock.count or 0
 	local last = lastStock[kind]
-	local before = last and last.id == id and last.count or nil
-	lastStock[kind] = { id = id, count = count }
+	local before = last and last.key == key and last.count or nil
+	lastStock[kind] = { key = key, count = count }
 
 	local conjure = conjures(kind)
 	local label = conjure and "conjured " .. kind or (kind == "bandage" and "bandages" or kind)
 	local threshold = SnackCheckDB.thresholds[kind]
-	if not entry then
-		if not last or last.id then
+	if not stock then
+		if not last or last.key then
 			report.out[#report.out + 1] = label
 		else
 			return
 		end
 	elseif count < threshold and (not before or before >= threshold) then
 		report.lowKinds[#report.lowKinds + 1] = label
-		report.lowItems[#report.lowItems + 1] = count .. " " .. entry.name
+		report.lowItems[#report.lowItems + 1] = stock.text
 	else
 		return
 	end
@@ -377,9 +436,9 @@ local function update(level)
 	chosen.food = choose("food", level)
 	chosen.drink = hasMana and choose("drink", level) or nil
 	chosen.bandage = SnackCheckDB.bandages and choose("bandage", level) or nil
-	restock.food = choose("food", level, conjures("food") and "only" or "skip")
-	restock.drink = hasMana and choose("drink", level, conjures("drink") and "only" or "skip") or nil
-	restock.bandage = chosen.bandage
+	restock.food = stockFor("food", level)
+	restock.drink = hasMana and stockFor("drink", level) or nil
+	restock.bandage = SnackCheckDB.bandages and stockFor("bandage", level) or nil
 	if not SnackCheckDB.bandages then lastStock.bandage = nil end
 	buttons.drink:SetShown(hasMana)
 	buttons.bandage:SetShown(SnackCheckDB.bandages)
@@ -485,6 +544,9 @@ function showFlyout(owner)
 		button.icon:SetDesaturated(not canUse(owner.kind, entry, level))
 		button.count:SetText(entry.count)
 		button.pinned:SetShown(entry.id == pinned)
+		-- the template's "checked" glow looks just like our pin glow and sticks
+		-- after a click, so keep it off
+		if button.SetChecked then button:SetChecked(false) end
 		button:Show()
 	end
 	for i = #list + 1, #flyout.buttons do
@@ -686,7 +748,10 @@ anchor:SetScript("OnEvent", function(_, event, arg1)
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		-- give the action bars a frame to load their layout
 		C_Timer.After(0, applyLayout)
-		if not macrosReady then
+		-- zoning in or out of a dungeon changes whether buff food gets picked
+		if macrosReady then
+			update()
+		else
 			macrosReady = true
 			update()
 			C_Timer.After(STOCK_DELAY, function()

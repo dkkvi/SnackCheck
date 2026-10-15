@@ -55,6 +55,10 @@ for buffID, spells in pairs(BUFF_SPELLS) do
 	for _, spellID in ipairs(spells) do buffBySpell[spellID] = buffID end
 end
 
+function addon.IsConsumableBuff(buffID)
+	return BUFF_SPELLS[buffID] ~= nil
+end
+
 function addon.GetConsumableBuff(spellID)
 	return buffBySpell[spellID]
 end

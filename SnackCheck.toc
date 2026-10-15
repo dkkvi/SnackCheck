@@ -3,7 +3,7 @@
 ## Notes: Eat and drink buttons, optional first aid bandages, and warnings when you're running low.
 ## IconTexture: Interface\Icons\INV_Misc_Fork&Knife
 ## Author: dkkvi
-## Version: 0.3.0
+## Version: 0.4.0
 ## SavedVariables: SnackCheckDB
 ## SavedVariablesPerCharacter: SnackCheckCharDB
 
