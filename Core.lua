@@ -176,7 +176,7 @@ end
 
 -- you only get one food buff at a time, so any of them counts: the exact one
 -- the item gives, anything called Well Fed, or any buff from the food list
-local function hasBuff(entry)
+local function readFoodBuff(entry)
 	if entry.buffID and C_UnitAuras.GetPlayerAuraBySpellID(entry.buffID) then
 		return true
 	end
@@ -189,6 +189,13 @@ local function hasBuff(entry)
 		if addon.IsConsumableBuff(aura.spellId) then return true end
 	end
 	return false
+end
+
+-- auras are secret to addons in combat and reading them throws. we don't
+-- look in combat, but if the game still says no, count it as not buffed
+local function hasBuff(entry)
+	local ok, buffed = pcall(readFoodBuff, entry)
+	return ok and buffed
 end
 
 -- dungeon mobs give less xp, so the xp buff food is wasted there
@@ -761,6 +768,12 @@ anchor:SetScript("OnEvent", function(_, event, arg1)
 		end
 	elseif event == "UNIT_AURA" then
 		if arg1 ~= "player" then return end
+		-- buffs can't be read in combat and the buttons can't change anyway,
+		-- so catch up when it ends
+		if InCombatLockdown() then
+			updatePending = true
+			return
+		end
 		local level = UnitLevel("player")
 		local food = choose("food", level)
 		local drink = UnitPowerMax("player", Enum.PowerType.Mana) > 0 and choose("drink", level) or nil
