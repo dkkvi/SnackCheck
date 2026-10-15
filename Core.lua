@@ -2,6 +2,8 @@
 -- using items is protected, so every click goes through a secure button whose
 -- macro gets rewritten (out of combat) whenever the bags change
 
+local _, addon = ...
+
 -- Keybinds ------------------------------------------------------------------
 
 local BIND_BOTH = "CLICK SnackCheckButton:LeftButton"
@@ -38,11 +40,8 @@ DEFAULT_COUNT_SIZE = math.floor(DEFAULT_COUNT_SIZE + 0.5)
 local countSize = DEFAULT_COUNT_SIZE
 
 -- spell names come from the client so non-English clients work too
-local KIND = {
-	[C_Spell.GetSpellName(433) or "Food"] = "food",
-	[C_Spell.GetSpellName(430) or "Drink"] = "drink",
-}
-local WELL_FED = (C_Spell.GetSpellName(19705) or "Well Fed"):lower()
+local WELL_FED_NAME = C_Spell.GetSpellName(19705) or "Well Fed"
+local WELL_FED = WELL_FED_NAME:lower()
 local CONJURED = ITEM_CONJURED or "Conjured Item"
 
 local items = { food = {}, drink = {}, bandage = {} }
@@ -134,24 +133,32 @@ local function scan()
 				local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(id)
 				local isBandage = SnackCheckDB.bandages and subClassID == BANDAGE_SUBCLASS
 				if classID == Enum.ItemClass.Consumable and (subClassID == FOOD_AND_DRINK_SUBCLASS or isBandage) then
-					local spellName = not isBandage and C_Item.GetItemSpell(id)
+					local spellName, spellID
+					if not isBandage then spellName, spellID = C_Item.GetItemSpell(id) end
 					local name, _, _, itemLevel, minLevel = C_Item.GetItemInfo(id)
-					local kind = isBandage and "bandage" or KIND[spellName]
+					local spell = not isBandage and addon.GetConsumableSpell(spellName, spellID)
 					if not minLevel or (isBandage and not itemLevel) or (not isBandage and not spellName) then
 						incomplete = true
-					elseif kind then
+					elseif isBandage or spell then
 						seen[id] = true
 						local flags = not isBandage and readTooltip(bag, slot, id) or {}
-						table.insert(items[kind], {
+						local buffID = addon.GetConsumableBuff(spellID)
+						local entry = {
 							id = id,
 							name = name,
 							icon = info.iconFileID,
 							minLevel = minLevel,
 							itemLevel = itemLevel,
 							count = C_Item.GetItemCount(id),
-							buff = flags.buff,
+							buff = flags.buff or buffID ~= nil or (spell and spell.buff),
+							buffID = buffID,
 							conjured = flags.conjured,
-						})
+						}
+						for _, kind in ipairs(BUTTON_ORDER) do
+							if (isBandage and kind == "bandage") or (spell and spell[kind]) then
+								table.insert(items[kind], entry)
+							end
+						end
 					end
 				end
 			end
@@ -167,7 +174,14 @@ local function canUse(kind, entry, level)
 	return entry.minLevel <= level and (kind ~= "bandage" or C_Item.IsUsableItem(entry.id))
 end
 
--- order: pinned buff food, conjured, pinned, best non-buff.
+local function hasBuff(entry)
+	if entry.buffID then
+		return C_UnitAuras.GetPlayerAuraBySpellID(entry.buffID) ~= nil
+	end
+	return C_UnitAuras.GetAuraDataBySpellName("player", WELL_FED_NAME, "HELPFUL") ~= nil
+end
+
+-- order: pinned buff if missing, conjured, pinned, best non-buff.
 -- conjuredFilter "skip" or "only" narrows it down for the warnings
 local function choose(kind, level, conjuredFilter)
 	local pinnedID = SnackCheckCharDB[kind]
@@ -178,7 +192,7 @@ local function choose(kind, level, conjuredFilter)
 			or (conjuredFilter == "only" and entry.conjured)
 		if canUse(kind, entry, level) and allowed then
 			if entry.id == pinnedID then
-				pinned = entry
+				if not entry.buff or not hasBuff(entry) then pinned = entry end
 			elseif entry.conjured and not entry.buff then
 				conjured = conjured or entry
 			elseif not entry.buff then
@@ -297,6 +311,19 @@ local function useLine(kind)
 	return "/use item:" .. entry.id
 end
 
+-- don't use the same item twice if it restores both health and mana
+local function useLines(kinds)
+	local lines, used = {}, {}
+	for _, kind in ipairs(kinds) do
+		local entry = chosen[kind]
+		if entry and not used[entry.id] then
+			lines[#lines + 1] = useLine(kind)
+			used[entry.id] = true
+		end
+	end
+	return lines
+end
+
 -- macros aren't always loaded at PLAYER_LOGIN, an early lookup finds nothing
 -- and we'd make a duplicate
 local macrosReady = false
@@ -314,12 +341,8 @@ local function syncMacros(hasMana)
 			or (macro.needsBandages and not SnackCheckDB.bandages) then
 			if index > 0 then DeleteMacro(index) end
 		else
-			local lines = { "#showtooltip" }
-			for _, kind in ipairs(macro.kinds) do
-				if chosen[kind] then
-					lines[#lines + 1] = useLine(kind)
-				end
-			end
+			local lines = useLines(macro.kinds)
+			table.insert(lines, 1, "#showtooltip")
 			local icon = #lines > 1 and DYNAMIC_MACRO_ICON or macro.placeholder
 			local body = table.concat(lines, "\n")
 
@@ -372,11 +395,7 @@ local function update(level)
 		button.icon:SetDesaturated(not entry)
 		button.count:SetText(entry and entry.count or "")
 	end
-	local both = {}
-	for _, kind in ipairs({ "food", "drink" }) do
-		if chosen[kind] then both[#both + 1] = useLine(kind) end
-	end
-	combined:SetAttribute("macrotext", table.concat(both, "\n"))
+	combined:SetAttribute("macrotext", table.concat(useLines({ "food", "drink" }), "\n"))
 	anchor:SetShown(SnackCheckDB.showButtons)
 	syncMacros(hasMana)
 
@@ -430,6 +449,8 @@ local function createFlyoutButton(index)
 		GameTooltip:SetItemByID(self.entry.id)
 		if SnackCheckCharDB[flyout.owner.kind] == self.entry.id then
 			GameTooltip:AddLine("Click to go back to picking automatically", 0.4, 0.8, 1)
+		elseif self.entry.buff then
+			GameTooltip:AddLine("Click to use this when its buff is missing", 0.4, 0.8, 1)
 		else
 			GameTooltip:AddLine("Click to always use this one", 0.4, 0.8, 1)
 		end
@@ -659,6 +680,7 @@ anchor:SetScript("OnEvent", function(_, event, arg1)
 		SnackCheckDB.layout = SnackCheckDB.layout or { matchBar = true, size = 45, spacing = 6 }
 		-- skill updates can arrive before login, when settings aren't ready yet
 		anchor:RegisterEvent("SKILL_LINES_CHANGED")
+		anchor:RegisterUnitEvent("UNIT_AURA", "player")
 		restorePosition()
 		update()
 	elseif event == "PLAYER_ENTERING_WORLD" then
@@ -672,6 +694,12 @@ anchor:SetScript("OnEvent", function(_, event, arg1)
 				update()
 			end)
 		end
+	elseif event == "UNIT_AURA" then
+		if arg1 ~= "player" then return end
+		local level = UnitLevel("player")
+		local food = choose("food", level)
+		local drink = UnitPowerMax("player", Enum.PowerType.Mana) > 0 and choose("drink", level) or nil
+		if food ~= chosen.food or drink ~= chosen.drink then update() end
 	elseif event == "PLAYER_LEVEL_UP" then
 		-- UnitLevel lags behind this event, use the arg
 		update(arg1)

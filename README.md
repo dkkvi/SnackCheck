@@ -6,11 +6,11 @@ Made for WoW Forever since it's the version I play, feel free to fork my repo an
 
 ## What it does
 
-It picks the highest level food and drink your character can actually use. Leftovers from an older stack go first, so your bags don't fill up with stacks of 2. Buff food never gets eaten unless you tell it to.
+It picks the highest level food and drink your character can actually use. Leftovers from an older stack go first, so your bags don't fill up with stacks of 2. Buff food and drinks never get used unless you tell it to.
 
-Got mage food or water? That goes first, even before something you pinned. Free food is free food. If you're the mage yourself, the warnings keep an eye on your conjured stuff instead and tell you when it's time to conjure more.
+Got mage food or water? That goes first between buffs. Free food is free food. If you're the mage yourself, the warnings keep an eye on your conjured stuff instead and tell you when it's time to conjure more.
 
-Hover over a button and you get a list of everything in your bags. Click one to always use that, click it again to let the addon pick. When your pinned food runs out it just uses the next best thing, and switches back once you've restocked. Pins are per character.
+Hover over a button and you get a list of everything in your bags. Click one to always use that, click it again to let the addon pick. Buff food and drinks only get used when their buff is missing. When your pinned food runs out it just uses the next best thing, and switches back once you've restocked. Pins are per character.
 
 You get a warning when the food or drink you're about to use drops below a number you set, and one when you're out. If you log in already low you get a single reminder. After that it only speaks up when something actually changes.
 

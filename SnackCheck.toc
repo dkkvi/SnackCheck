@@ -7,4 +7,5 @@
 ## SavedVariables: SnackCheckDB
 ## SavedVariablesPerCharacter: SnackCheckCharDB
 
+Consumables.lua
 Core.lua
