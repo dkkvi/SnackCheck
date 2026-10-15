@@ -66,6 +66,10 @@ Settings and bindings are shared between your characters. Pins and macros aren't
 
 ## Changelog
 
+### 0.4.1
+
+- Fixed a Lua error when you got attacked. WoW doesn't let addons look at your buffs in combat, so it waits until the fight is over now.
+
 ### 0.4.0
 
 - Buff food, including the xp food from cooking, gets eaten when you're not Well Fed. Not in dungeons though. Thanks to brucestarlove for adding all the buff food and drinks in Forever.
