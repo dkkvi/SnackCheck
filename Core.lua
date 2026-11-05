@@ -598,6 +598,18 @@ local function restorePosition()
 	end
 end
 
+-- the anchor holds secure buttons, so combat blocks StopMovingOrSizing on it.
+-- a drag still going when combat starts has to be dropped before the lock,
+-- or it stays glued to the cursor
+local dragging = false
+
+local function stopDragging()
+	if not dragging or InCombatLockdown() then return end
+	dragging = false
+	anchor:StopMovingOrSizing()
+	savePosition()
+end
+
 local function createButton(kind, name, label)
 	local button = CreateFrame("Button", name, anchor, "SecureActionButtonTemplate")
 	button.kind = kind
@@ -617,13 +629,11 @@ local function createButton(kind, name, label)
 	button:SetScript("OnDragStart", function()
 		if IsShiftKeyDown() and not InCombatLockdown() then
 			flyout:Hide()
+			dragging = true
 			anchor:StartMoving()
 		end
 	end)
-	button:SetScript("OnDragStop", function()
-		anchor:StopMovingOrSizing()
-		savePosition()
-	end)
+	button:SetScript("OnDragStop", stopDragging)
 
 	button:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -784,7 +794,9 @@ anchor:SetScript("OnEvent", function(_, event, arg1)
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		-- last chance before combat locks it
 		flyout:Hide()
+		stopDragging()
 	elseif event == "PLAYER_REGEN_ENABLED" then
+		stopDragging()
 		if updatePending then update() end
 		if layoutPending then applyLayout() end
 	else
